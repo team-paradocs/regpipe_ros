@@ -7,6 +7,8 @@ import open3d as o3d
 from . import open3d_conversions
 import threading
 import multiprocessing
+from . import proc_pipeline
+
 
 class PCDRegPipe(Node):
     """A class for subscribing to a PointCloud2 message in ROS2 and processing it with Open3D.
@@ -24,8 +26,13 @@ class PCDRegPipe(Node):
         self.camera_frame = self.get_parameter("camera_frame").get_parameter_value().string_value
         self.subscriber_ = self.create_subscription(PointCloud2, self.topic, self.callback, 10)
         self._publisher_ = self.create_publisher(PointCloud2, 'processed_point_cloud', 10)
-        self.last_cloud = None
 
+        x_thresh = 0.3
+        y_thresh = 0.15
+        z_thresh = 0.3
+        self.proc_pipe = proc_pipeline.PointCloudProcessingPipeline(x_thresh, y_thresh, z_thresh)
+
+        self.last_cloud = None
         self.get_logger().info(f"Subscribing to topic {self.topic}. Press Enter to register.")
 
         # Start a separate thread for the input to not block the ROS2 node
@@ -61,23 +68,25 @@ class PCDRegPipe(Node):
         else:
             self.get_logger().info("No point cloud has been received yet.")
 
-    def _vis_process_target(self):
+    def _vis_process_target(self, cloud=None):
         """The target function for the multiprocessing process that handles visualization."""
-        if self.last_cloud:
-            o3d.visualization.draw_geometries([self.last_cloud])
+        if cloud is None:
+            cloud = self.last_cloud
+        if cloud:
+            o3d.visualization.draw_geometries([cloud], window_name="Point Cloud",
+                                            zoom=0.57000000000000017,
+                                            front=[0.086126891594714566, 0.27099417737370496, -0.9587201439282379],
+                                            lookat=[-0.11521162012853672, -0.39411284983247913, 1.8123871758649917],
+                                            up=[-0.0069065635673039305, -0.96211034045195976, -0.27257291166787834])
+            
 
     def process_point_cloud(self):
         """Processes the last received point cloud with Open3D."""
         if self.last_cloud:
-            # Downsample the point cloud
-            downsampled = self.last_cloud.voxel_down_sample(voxel_size=0.01)
+            cloud = self.proc_pipe.run(self.last_cloud)
+            self.publish_point_cloud(cloud)
 
-            # Paint the point cloud
-            downsampled.paint_uniform_color([1, 0.706, 0])
-
-            # Publish the processed point cloud
-            self.publish_point_cloud(downsampled)
-
+            
     def publish_point_cloud(self, cloud):
         """Publishes the processed point cloud to a new ROS2 topic.
         Args:
