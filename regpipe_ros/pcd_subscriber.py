@@ -8,19 +8,8 @@ from . import open3d_conversions
 import threading
 import multiprocessing
 
-def visualize_point_cloud(cloud):
-    """Visualizes the point cloud in an Open3D window.
-
-    Args:
-        cloud (open3d.geometry.PointCloud): The point cloud to visualize.
-    """
-    if cloud:
-        o3d.visualization.draw_geometries([cloud])
-
-
 class PCDSubscriber(Node):
     """A class for subscribing to a PointCloud2 message in ROS2 and displaying it in Open3D.
-
     Attributes:
         topic (str): The name of the ROS2 topic to subscribe to for the PointCloud2 message.
         camera_frame (str): The name of the camera frame to use for the PointCloud2 message.
@@ -43,11 +32,8 @@ class PCDSubscriber(Node):
         self.input_thread.daemon = True
         self.input_thread.start()
 
-    
-
     def callback(self, msg):
         """Callback function for the subscriber.
-
         Args:
             msg (sensor_msgs.msg.PointCloud2): The incoming PointCloud2 message.
         """
@@ -58,18 +44,26 @@ class PCDSubscriber(Node):
         except Exception as e:
             self.get_logger().error(f"Error converting message to point cloud: {e}")
 
-
     def wait_for_input(self):
         """Waits for the user input to visualize the latest received point cloud."""
         while rclpy.ok():
             input("Press Enter to visualize the latest point cloud...")
-            if self.last_cloud:
-                # Start visualization in a separate process
-                vis_process = multiprocessing.Process(target=visualize_point_cloud, args=(self.last_cloud,))
-                vis_process.start()
-                vis_process.join()
-            else:
-                self.get_logger().info("No point cloud has been received yet.")
+            self.visualize_point_cloud()
+
+    def visualize_point_cloud(self):
+        """Visualizes the last received point cloud in an Open3D window."""
+        if self.last_cloud:
+            # Start visualization in a separate process to not block ROS2 node
+            vis_process = multiprocessing.Process(target=self._vis_process_target)
+            vis_process.start()
+            vis_process.join()
+        else:
+            self.get_logger().info("No point cloud has been received yet.")
+
+    def _vis_process_target(self):
+        """The target function for the multiprocessing process that handles visualization."""
+        if self.last_cloud:
+            o3d.visualization.draw_geometries([self.last_cloud])
 
 def main(args=None):
     rclpy.init(args=args)
