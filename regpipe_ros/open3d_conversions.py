@@ -20,6 +20,21 @@ FIELDS_XYZRGB = FIELDS_XYZ + \
 
 
 def to_msg(open3d_cloud, frame_id=None, stamp=None):
+    """
+    Converts an Open3D point cloud to a ROS2 PointCloud2 message.
+
+    This function converts a point cloud from Open3D format to ROS2's PointCloud2 message format,
+    allowing for integration with ROS2 systems. It supports point clouds with just XYZ coordinates
+    or XYZ coordinates with RGB color information.
+
+    Parameters:
+        open3d_cloud (open3d.geometry.PointCloud): The Open3D point cloud to convert.
+        frame_id (str, optional): The coordinate frame that the point cloud is associated with.
+        stamp (builtin_interfaces.msg.Time, optional): The timestamp of the point cloud.
+
+    Returns:
+        sensor_msgs.msg.PointCloud2: The ROS2 PointCloud2 message representing the input point cloud.
+    """
     header = Header()
     if stamp is not None:
         header.stamp = stamp
@@ -51,6 +66,19 @@ def to_msg(open3d_cloud, frame_id=None, stamp=None):
 
 
 def from_msg(ros_cloud):
+    """
+    Converts a ROS2 PointCloud2 message to an Open3D point cloud.
+
+    This function converts a point cloud from ROS2's PointCloud2 message format to Open3D format,
+    enabling the use of Open3D's powerful point cloud processing and visualization capabilities.
+    It supports conversion of point clouds with XYZ coordinates, with or without RGB color information.
+
+    Parameters:
+        ros_cloud (sensor_msgs.msg.PointCloud2): The ROS2 PointCloud2 message to convert.
+
+    Returns:
+        open3d.geometry.PointCloud: The Open3D point cloud object created from the ROS2 message.
+    """
     xyzrgb_array = ros_numpy.point_cloud2.pointcloud2_to_array(ros_cloud)
 
     mask = np.isfinite(xyzrgb_array['x']) & np.isfinite(xyzrgb_array['y']) & np.isfinite(xyzrgb_array['z'])

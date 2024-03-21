@@ -21,8 +21,6 @@ def visualize_point_cloud(cloud):
 class PCDSubscriber(Node):
     """A class for subscribing to a PointCloud2 message in ROS2 and displaying it in Open3D.
 
-    This class subscribes to a PointCloud2 message on a specified topic and displays it in Open3D.
-
     Attributes:
         topic (str): The name of the ROS2 topic to subscribe to for the PointCloud2 message.
         camera_frame (str): The name of the camera frame to use for the PointCloud2 message.

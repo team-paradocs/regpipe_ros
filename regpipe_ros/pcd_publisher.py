@@ -11,8 +11,6 @@ from . import open3d_conversions
 class PCDPublisher(Node):
     """A class for publishing point cloud data from a PCD file in ROS2.
 
-    This class reads a PCD file and publishes its contents as a ROS2 PointCloud2 message on a specified topic.
-
     Attributes:
         file_name (str): The name of the PCD file to publish.
         topic (str): The name of the ROS2 topic to publish the PointCloud2 message on.
