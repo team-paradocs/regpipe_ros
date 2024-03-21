@@ -1,16 +1,20 @@
 #!/usr/bin/env python
 
+import multiprocessing
+import numpy as np
+import threading
+
+import open3d as o3d
 import rclpy
+from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
-import open3d as o3d
-from . import open3d_conversions
-import threading
-import multiprocessing
-from . import proc_pipeline
 from visualization_msgs.msg import Marker, MarkerArray
 import geometry_msgs.msg
-import numpy as np
+
+from . import open3d_conversions, proc_pipeline, registration
+
+
 
 class PCDRegPipe(Node):
     """A class for subscribing to a PointCloud2 message in ROS2 and processing it with Open3D.
@@ -33,8 +37,11 @@ class PCDRegPipe(Node):
         self.x_thresh = 0.25
         self.y_thresh = 0.15
         self.z_thresh = 0.25
+        self.source = o3d.io.read_point_cloud("/home/warra/ws_paradocs/src/regpipe_ros/source/femur.ply")
 
         self.proc_pipe = proc_pipeline.PointCloudProcessingPipeline(self.x_thresh, self.y_thresh, self.z_thresh)
+        self.estimator = registration.Estimator('centroid')
+        self.refiner = registration.Refiner('ransac_icp')
 
         self.last_cloud = None
         self.pcd_center = None
@@ -90,7 +97,21 @@ class PCDRegPipe(Node):
         if self.last_cloud:
             self.pcd_center = self.last_cloud.get_center()
             cloud = self.proc_pipe.run(self.last_cloud)
-            self.publish_point_cloud(cloud)
+
+            self.source_cloud = self.source.voxel_down_sample(voxel_size=0.003)
+            self.target_cloud = cloud.voxel_down_sample(voxel_size=0.003)
+
+
+            init_transformation = self.estimator.estimate(self.source_cloud, self.target_cloud)
+            transform = init_transformation
+            transform = self.refiner.refine(self.source_cloud, self.target_cloud, init_transformation)
+            self.get_logger().info(f"Transformation matrix: {transform}")
+
+            self.source_cloud.transform(transform)
+            self.source_cloud.paint_uniform_color([1, 0, 0])
+
+             
+            self.publish_point_cloud(self.source_cloud)
 
             
     def publish_point_cloud(self, cloud):
@@ -99,10 +120,10 @@ class PCDRegPipe(Node):
             cloud (open3d.geometry.PointCloud): The processed point cloud to publish.
         """
         try:
+            self.publish_bounding_box()
             msg = open3d_conversions.to_msg(cloud, frame_id=self.camera_frame)
             self._publisher_.publish(msg)
             self.get_logger().info(f"Processed point cloud with {len(cloud.points)} points published.")
-            self.publish_bounding_box()
         except Exception as e:
             self.get_logger().error(f"Error converting point cloud to message: {e}")
 
@@ -154,9 +175,9 @@ class PCDRegPipe(Node):
                 ]
                 marker.scale.x = 0.01  # Width of the line
                 marker.color.a = 1.0  # Don't forget to set the alpha!
-                marker.color.r = 1.0
+                marker.color.r = 0.0
                 marker.color.g = 0.0
-                marker.color.b = 0.0
+                marker.color.b = 1.0
                 marker_array.markers.append(marker)
                 marker_id += 1
 
