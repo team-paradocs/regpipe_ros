@@ -56,23 +56,23 @@ def from_msg(ros_cloud):
     mask = np.isfinite(xyzrgb_array['x']) & np.isfinite(xyzrgb_array['y']) & np.isfinite(xyzrgb_array['z'])
     cloud_array = xyzrgb_array[mask]
 
-    open3d_cloud = open3d.PointCloud()
+    open3d_cloud = open3d.geometry.PointCloud()
 
-    points = np.zeros(cloud_array.shape + (3,), dtype=np.float)
+    points = np.zeros(cloud_array.shape + (3,), dtype=np.float32)
     points[..., 0] = cloud_array['x']
     points[..., 1] = cloud_array['y']
     points[..., 2] = cloud_array['z']
-    open3d_cloud.points = open3d.Vector3dVector(points)
+    open3d_cloud.points = open3d.utility.Vector3dVector(points)
 
     if 'rgb' in xyzrgb_array.dtype.names:
         rgb_array = ros_numpy.point_cloud2.split_rgb_field(xyzrgb_array)
         cloud_array = rgb_array[mask]
 
-        colors = np.zeros(cloud_array.shape + (3,), dtype=np.float)
+        colors = np.zeros(cloud_array.shape + (3,), dtype=np.float32)
         colors[..., 0] = cloud_array['r']
         colors[..., 1] = cloud_array['g']
         colors[..., 2] = cloud_array['b']
 
-        open3d_cloud.colors = open3d.Vector3dVector(colors / 255.0)
+        open3d_cloud.colors = open3d.utility.Vector3dVector(colors / 255.0)
 
     return open3d_cloud
