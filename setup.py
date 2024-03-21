@@ -20,7 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'hello_world = regpipe_ros.hello_world:main'
+            'hello_world = regpipe_ros.hello_world:main',
+            'pcd_publisher = regpipe_ros.pcd_publisher:main',
         ],
     },
 )
