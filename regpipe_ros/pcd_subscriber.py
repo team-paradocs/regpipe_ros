@@ -63,7 +63,13 @@ class PCDSubscriber(Node):
     def _vis_process_target(self):
         """The target function for the multiprocessing process that handles visualization."""
         if self.last_cloud:
-            o3d.visualization.draw_geometries([self.last_cloud])
+            o3d.visualization.draw_geometries([self.last_cloud], window_name="Point Cloud",
+                                            zoom=0.57000000000000017,
+                                            front=[0.086126891594714566, 0.27099417737370496, -0.9587201439282379],
+                                            lookat=[-0.11521162012853672, -0.39411284983247913, 1.8123871758649917],
+                                            up=[-0.0069065635673039305, -0.96211034045195976, -0.27257291166787834])
+            
+            o3d.io.write_point_cloud("data/pointcloud.pcd", self.last_cloud)
 
 def main(args=None):
     rclpy.init(args=args)
