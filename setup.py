@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
             'hello_world = regpipe_ros.hello_world:main',
             'pcd_publisher = regpipe_ros.pcd_publisher:main',
+            'pcd_subscriber = regpipe_ros.pcd_subscriber:main',
         ],
     },
 )

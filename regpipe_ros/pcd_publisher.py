@@ -5,7 +5,6 @@ from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 import open3d
 from . import open3d_conversions
-from ament_index_python.packages import get_package_share_directory
 
 
 
