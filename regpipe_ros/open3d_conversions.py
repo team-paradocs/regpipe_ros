@@ -3,8 +3,8 @@
 
 import numpy as np
 import open3d
-import ros2_numpy
-from sensor_msgs.msg import PointCloud2 as pc2
+import ros2_numpy as ros_numpy
+from sensor_msgs.msg import PointCloud2 
 from numpy.lib import recfunctions
 from sensor_msgs.msg import PointField
 from std_msgs.msg import Header
@@ -26,29 +26,28 @@ def to_msg(open3d_cloud, frame_id=None, stamp=None):
     if frame_id is not None:
         header.frame_id = frame_id
 
-    o3d_asarray = np.asarray(open3d_cloud.points)
-
-    o3d_x = o3d_asarray[:, 0]
-    o3d_y = o3d_asarray[:, 1]
-    o3d_z = o3d_asarray[:, 2]
-
-    cloud_data = np.core.records.fromarrays([o3d_x, o3d_y, o3d_z], names='x,y,z')
+    o3d_points = np.asarray(open3d_cloud.points, dtype=np.float32)
 
     if not open3d_cloud.colors:  # XYZ only
-        fields = FIELDS_XYZ
-    else:  # XYZ + RGB
-        fields = FIELDS_XYZRGB
-        color_array = np.array(np.floor(np.asarray(open3d_cloud.colors) * 255), dtype=np.uint8)
+        cloud_msg = ros_numpy.point_cloud2.array_to_xyz_pointcloud2(o3d_points, header)
+    else:  # XYZRGB
+        o3d_colors = np.asarray(open3d_cloud.colors, dtype=np.float32)
+        # Pack RGB values
+        rgb_ints = np.floor(o3d_colors * 255).astype(np.uint32)
+        rgb_packed = np.left_shift(rgb_ints[:, 0], 16) | np.left_shift(rgb_ints[:, 1], 8) | rgb_ints[:, 2]
 
-        o3d_r = color_array[:, 0]
-        o3d_g = color_array[:, 1]
-        o3d_b = color_array[:, 2]
+        # Combine XYZ and RGB into one structured array
+        dtype = [('x', np.float32), ('y', np.float32), ('z', np.float32), ('rgb', np.uint32)]
+        structured_array = np.empty(len(o3d_points), dtype=dtype)
+        structured_array['x'] = o3d_points[:, 0]
+        structured_array['y'] = o3d_points[:, 1]
+        structured_array['z'] = o3d_points[:, 2]
+        structured_array['rgb'] = rgb_packed
 
-        cloud_data = np.lib.recfunctions.append_fields(cloud_data, ['r', 'g', 'b'], [o3d_r, o3d_g, o3d_b])
+        cloud_msg = ros_numpy.msgify(PointCloud2, structured_array)
+        cloud_msg.header = header
 
-        cloud_data = ros_numpy.point_cloud2.merge_rgb_fields(cloud_data)
-
-    return pc2.create_cloud(header, fields, cloud_data)
+    return cloud_msg
 
 
 def from_msg(ros_cloud):
