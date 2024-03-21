@@ -23,6 +23,7 @@ setup(
             'hello_world = regpipe_ros.hello_world:main',
             'pcd_publisher = regpipe_ros.pcd_publisher:main',
             'pcd_subscriber = regpipe_ros.pcd_subscriber:main',
+            'pcd_regpipe = regpipe_ros.pcd_regpipe:main',
         ],
     },
 )
