@@ -3,9 +3,19 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
-import open3d
+import open3d as o3d
 from . import open3d_conversions
 import threading
+import multiprocessing
+
+def visualize_point_cloud(cloud):
+    """Visualizes the point cloud in an Open3D window.
+
+    Args:
+        cloud (open3d.geometry.PointCloud): The point cloud to visualize.
+    """
+    if cloud:
+        o3d.visualization.draw_geometries([cloud])
 
 
 class PCDSubscriber(Node):
@@ -32,6 +42,7 @@ class PCDSubscriber(Node):
 
         # Start a separate thread for the input to not block the ROS2 node
         self.input_thread = threading.Thread(target=self.wait_for_input)
+        self.input_thread.daemon = True
         self.input_thread.start()
 
     
@@ -51,12 +62,16 @@ class PCDSubscriber(Node):
 
 
     def wait_for_input(self):
-        """Wait for the user to press Enter and visualize the last received point cloud."""
-        input("Press Enter to visualize the last received point cloud...")
-        if self.last_cloud is not None:
-            open3d.visualization.draw_geometries([self.last_cloud])
-        else:
-            self.get_logger().info("No point cloud received yet.")
+        """Waits for the user input to visualize the latest received point cloud."""
+        while rclpy.ok():
+            input("Press Enter to visualize the latest point cloud...")
+            if self.last_cloud:
+                # Start visualization in a separate process
+                vis_process = multiprocessing.Process(target=visualize_point_cloud, args=(self.last_cloud,))
+                vis_process.start()
+                vis_process.join()
+            else:
+                self.get_logger().info("No point cloud has been received yet.")
 
 def main(args=None):
     rclpy.init(args=args)
