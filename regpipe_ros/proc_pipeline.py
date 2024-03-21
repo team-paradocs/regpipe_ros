@@ -117,7 +117,7 @@ def main():
     pcd = o3d.io.read_point_cloud(pcd_path)
 
     pipeline = PointCloudProcessingPipeline(x_thresh, y_thresh, z_thresh)
-    pipeline.run(pcd)
+    pipeline.run(pcd, debug=True)
 
 if __name__ == "__main__":
     main()

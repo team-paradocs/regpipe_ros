@@ -8,7 +8,9 @@ from . import open3d_conversions
 import threading
 import multiprocessing
 from . import proc_pipeline
-
+from visualization_msgs.msg import Marker, MarkerArray
+import geometry_msgs.msg
+import numpy as np
 
 class PCDRegPipe(Node):
     """A class for subscribing to a PointCloud2 message in ROS2 and processing it with Open3D.
@@ -26,13 +28,16 @@ class PCDRegPipe(Node):
         self.camera_frame = self.get_parameter("camera_frame").get_parameter_value().string_value
         self.subscriber_ = self.create_subscription(PointCloud2, self.topic, self.callback, 10)
         self._publisher_ = self.create_publisher(PointCloud2, 'processed_point_cloud', 10)
+        self.marker_array_publisher = self.create_publisher(MarkerArray, 'bounding_box_marker_array', 10)
 
-        x_thresh = 0.3
-        y_thresh = 0.15
-        z_thresh = 0.3
-        self.proc_pipe = proc_pipeline.PointCloudProcessingPipeline(x_thresh, y_thresh, z_thresh)
+        self.x_thresh = 0.25
+        self.y_thresh = 0.15
+        self.z_thresh = 0.25
+
+        self.proc_pipe = proc_pipeline.PointCloudProcessingPipeline(self.x_thresh, self.y_thresh, self.z_thresh)
 
         self.last_cloud = None
+        self.pcd_center = None
         self.get_logger().info(f"Subscribing to topic {self.topic}. Press Enter to register.")
 
         # Start a separate thread for the input to not block the ROS2 node
@@ -48,7 +53,7 @@ class PCDRegPipe(Node):
         try:
             cloud = open3d_conversions.from_msg(msg)
             self.last_cloud = cloud
-            self.get_logger().info(f"Received point cloud with {len(cloud.points)} points.")
+            # self.get_logger().info(f"Received point cloud with {len(cloud.points)} points.")
         except Exception as e:
             self.get_logger().error(f"Error converting message to point cloud: {e}")
 
@@ -83,6 +88,7 @@ class PCDRegPipe(Node):
     def process_point_cloud(self):
         """Processes the last received point cloud with Open3D."""
         if self.last_cloud:
+            self.pcd_center = self.last_cloud.get_center()
             cloud = self.proc_pipe.run(self.last_cloud)
             self.publish_point_cloud(cloud)
 
@@ -96,8 +102,67 @@ class PCDRegPipe(Node):
             msg = open3d_conversions.to_msg(cloud, frame_id=self.camera_frame)
             self._publisher_.publish(msg)
             self.get_logger().info(f"Processed point cloud with {len(cloud.points)} points published.")
+            self.publish_bounding_box()
         except Exception as e:
             self.get_logger().error(f"Error converting point cloud to message: {e}")
+
+    def publish_bounding_box(self):
+            """Publishes a marker array representing a 3D bounding box around the point cloud."""
+            if not self.last_cloud:
+                self.get_logger().info("No point cloud has been received to draw a bounding box.")
+                return
+
+            # Define corners of the bounding box based on the threshold values
+            center = self.pcd_center
+            x_thresh = self.x_thresh
+            y_thresh = self.y_thresh
+            z_thresh = self.z_thresh
+
+            # Calculate corners of the bounding box
+            corners = [
+                center + np.array([x_thresh, y_thresh, z_thresh]),
+                center + np.array([-x_thresh, y_thresh, z_thresh]),
+                center + np.array([-x_thresh, -y_thresh, z_thresh]),
+                center + np.array([x_thresh, -y_thresh, z_thresh]),
+                center + np.array([x_thresh, y_thresh, -z_thresh]),
+                center + np.array([-x_thresh, y_thresh, -z_thresh]),
+                center + np.array([-x_thresh, -y_thresh, -z_thresh]),
+                center + np.array([x_thresh, -y_thresh, -z_thresh])
+            ]
+
+            # Define edges of the bounding box
+            edges = [
+                (0, 1), (1, 2), (2, 3), (3, 0),  # Upper face
+                (4, 5), (5, 6), (6, 7), (7, 4),  # Lower face
+                (0, 4), (1, 5), (2, 6), (3, 7)   # Connecting edges
+            ]
+
+            marker_array = MarkerArray()
+            marker_id = 0
+
+            for start, end in edges:
+                marker = Marker()
+                marker.header.frame_id = self.camera_frame
+                marker.header.stamp = self.get_clock().now().to_msg()
+                marker.ns = "bounding_box"
+                marker.id = marker_id
+                marker.type = Marker.LINE_STRIP
+                marker.action = Marker.ADD
+                marker.points = [
+                    geometry_msgs.msg.Point(x=corners[start][0], y=corners[start][1], z=corners[start][2]),
+                    geometry_msgs.msg.Point(x=corners[end][0], y=corners[end][1], z=corners[end][2])
+                ]
+                marker.scale.x = 0.01  # Width of the line
+                marker.color.a = 1.0  # Don't forget to set the alpha!
+                marker.color.r = 1.0
+                marker.color.g = 0.0
+                marker.color.b = 0.0
+                marker_array.markers.append(marker)
+                marker_id += 1
+
+            self.marker_array_publisher.publish(marker_array)
+            self.get_logger().info("Bounding box marker array published.")
+
 
 def main(args=None):
     rclpy.init(args=args)
