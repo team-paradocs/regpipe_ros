@@ -239,12 +239,12 @@ class Refiner:
         return reg_result.transformation
     
 
-    def ransac_icp(self, source, target, initial_transformation, trials=300):
+    def ransac_icp(self, source, target, initial_transformation, trials=200):
         '''
         RANSAC ICP
         '''
         threshold = 0.01
-        max_iter = 50
+        max_iter = 30
         best_transformation = None
         best_fitness = 0.0
 

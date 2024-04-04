@@ -10,6 +10,8 @@ from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 from visualization_msgs.msg import Marker, MarkerArray
+from geometry_msgs.msg import PoseStamped
+from scipy.spatial.transform import Rotation as R
 import geometry_msgs.msg
 
 from . import open3d_conversions, proc_pipeline, registration
@@ -32,12 +34,15 @@ class PCDRegPipe(Node):
         self.camera_frame = self.get_parameter("camera_frame").get_parameter_value().string_value
         self.subscriber_ = self.create_subscription(PointCloud2, self.topic, self.callback, 10)
         self._publisher_ = self.create_publisher(PointCloud2, 'processed_point_cloud', 10)
+        self.pose_publisher = self.create_publisher(PoseStamped, 'surgical_drill_pose', 10)
         self.marker_array_publisher = self.create_publisher(MarkerArray, 'bounding_box_marker_array', 10)
 
         self.x_thresh = 0.25
         self.y_thresh = 0.15
         self.z_thresh = 0.25
-        self.source = o3d.io.read_point_cloud("/home/warra/ws_paradocs/src/regpipe_ros/source/femur.ply")
+        # self.source = o3d.io.read_point_cloud("/home/warra/ws_paradocs/src/regpipe_ros/source/femur.ply")
+        self.source = o3d.io.read_point_cloud("/home/warra/ws_paradocs/src/regpipe_ros/source/femur_plan_ascii_drill.ply")
+
 
         self.proc_pipe = proc_pipeline.PointCloudProcessingPipeline(self.x_thresh, self.y_thresh, self.z_thresh)
         self.estimator = registration.Estimator('centroid')
@@ -103,6 +108,7 @@ class PCDRegPipe(Node):
 
 
             init_transformation = self.estimator.estimate(self.source_cloud, self.target_cloud)
+            # init_transformation = np.eye(4)
             transform = init_transformation
             transform = self.refiner.refine(self.source_cloud, self.target_cloud, init_transformation)
             self.get_logger().info(f"Transformation matrix: {transform}")
@@ -110,9 +116,54 @@ class PCDRegPipe(Node):
             self.source_cloud.transform(transform)
             self.source_cloud.paint_uniform_color([1, 0, 0])
 
+            surgical_drill_pose = self.compute_plan(transform)
+            self.pose_publisher.publish(surgical_drill_pose)
+
              
             self.publish_point_cloud(self.source_cloud)
 
+    def compute_plan(self, transform):
+        """Computes the surgical drill point by transforming the default point with the given transform."""
+
+
+        default_plan = np.array([
+            [0.79923312, -0.51902432, 0.30305144, 0.01612607],
+            [-0.51902432, -0.34178628, 0.78345127, -0.03820582],
+            [-0.30305144, -0.78345127, -0.54255316, 0.01866463],
+            [0., 0., 0., 1.]
+        ])
+
+        theta  = -np.pi/2
+        default_plan_rotated = np.copy(default_plan)
+        default_plan_rotated[:3, :3] = np.matmul(default_plan_rotated[:3, :3], R.from_euler('z', theta).as_matrix())
+
+
+        T = np.matmul(transform, default_plan_rotated)
+
+
+        # Convert R to a quaternion
+        Rot = T[:3, :3]
+        r = R.from_matrix(Rot)
+        quat = r.as_quat()  # Returns (x, y, z, w)
+
+        p = T[:3, 3]
+
+        pose = PoseStamped()
+        pose.header.frame_id = self.camera_frame
+        pose.header.stamp = self.get_clock().now().to_msg()
+
+        pose.pose.position.x = p[0]
+        pose.pose.position.y = p[1]
+        pose.pose.position.z = p[2]
+
+        pose.pose.orientation.x = quat[0]
+        pose.pose.orientation.y = quat[1]
+        pose.pose.orientation.z = quat[2]
+        pose.pose.orientation.w = quat[3]
+
+        self.get_logger().info(f"Drill point: {p}")
+
+        return pose
             
     def publish_point_cloud(self, cloud):
         """Publishes the processed point cloud to a new ROS2 topic.
