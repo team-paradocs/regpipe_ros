@@ -41,7 +41,7 @@ class PCDRegPipe(Node):
         self.y_thresh = 0.15
         self.z_thresh = 0.25
         # self.source = o3d.io.read_point_cloud("/home/warra/ws_paradocs/src/regpipe_ros/source/femur.ply")
-        self.source = o3d.io.read_point_cloud("/home/warra/ws_paradocs/src/regpipe_ros/source/femur_plan_ascii_drill.ply")
+        self.source = o3d.io.read_point_cloud("/home/paradocs/paradocs_ws/src/regpipe_ros/source/femur_plan_ascii_drill.ply")
 
 
         self.proc_pipe = proc_pipeline.PointCloudProcessingPipeline(self.x_thresh, self.y_thresh, self.z_thresh)
@@ -116,11 +116,19 @@ class PCDRegPipe(Node):
             self.source_cloud.transform(transform)
             self.source_cloud.paint_uniform_color([1, 0, 0])
 
-            surgical_drill_pose = self.compute_plan(transform)
-            self.pose_publisher.publish(surgical_drill_pose)
+            self.publish_point_cloud(self.source_cloud)
+
+            if_publish = input("Do you want to publish (y/n)?")
+
+            if if_publish == "y":
+                surgical_drill_pose = self.compute_plan(transform)
+                self.pose_publisher.publish(surgical_drill_pose)
+                print("Published Pose!")
+            else:
+                print("Not publishing. Moving on.")
+                return
 
              
-            self.publish_point_cloud(self.source_cloud)
 
     def compute_plan(self, transform):
         """Computes the surgical drill point by transforming the default point with the given transform."""
