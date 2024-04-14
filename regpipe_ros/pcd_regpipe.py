@@ -40,8 +40,9 @@ class PCDRegPipe(Node):
         self.x_thresh = 0.25
         self.y_thresh = 0.15
         self.z_thresh = 0.25
-        # self.source = o3d.io.read_point_cloud("/home/warra/ws_paradocs/src/regpipe_ros/source/femur.ply")
-        self.source = o3d.io.read_point_cloud("/home/paradocs/paradocs_ws/src/regpipe_ros/source/femur_plan_ascii_drill.ply")
+        package_dir = get_package_share_directory('regpipe_ros')
+        source = "femur_plan_ascii_drill.ply"
+        self.source = o3d.io.read_point_cloud(package_dir + "/source/" + source)
 
 
         self.proc_pipe = proc_pipeline.PointCloudProcessingPipeline(self.x_thresh, self.y_thresh, self.z_thresh)
