@@ -6,6 +6,7 @@ import threading
 
 import open3d as o3d
 import rclpy
+import yaml
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
@@ -41,8 +42,10 @@ class PCDRegPipe(Node):
         self.y_thresh = 0.15
         self.z_thresh = 0.25
         package_dir = get_package_share_directory('regpipe_ros')
-        source = "femur_plan_ascii_drill.ply"
+        source = "femur_shell.ply"
         self.source = o3d.io.read_point_cloud(package_dir + "/source/" + source)
+        self.plan_path = package_dir + "/source/plan_config.yaml"
+        self.plan = "plan2"
 
 
         self.proc_pipe = proc_pipeline.PointCloudProcessingPipeline(self.x_thresh, self.y_thresh, self.z_thresh)
@@ -131,25 +134,28 @@ class PCDRegPipe(Node):
 
              
 
-    def compute_plan(self, transform):
+    def compute_plan(self, transform,theta=0):
         """Computes the surgical drill point by transforming the default point with the given transform."""
 
 
-        # default_plan = np.array([
-        #     [0.79923312, -0.51902432, 0.30305144, 0.01612607],
-        #     [-0.51902432, -0.34178628, 0.78345127, -0.03820582],
-        #     [-0.30305144, -0.78345127, -0.54255316, 0.01866463],
-        #     [0., 0., 0., 1.]
-        # ])
+        p1, p2, p3 = self.load_plan_points(self.plan)
+        mesh = o3d.geometry.TriangleMesh()
+        mesh.vertices = o3d.utility.Vector3dVector([p1, p2, p3])
+        mesh.triangles = o3d.utility.Vector3iVector([[0, 1, 2]])
+        mesh.compute_vertex_normals()
+        normal =  np.asarray(mesh.vertex_normals)[0]
+        actual_normal = -normal
+        z_axis = np.array([0, 0, 1])
+        rotation_axis = np.cross(z_axis, actual_normal)
+        rotation_axis /= np.linalg.norm(rotation_axis)
+        angle = np.arccos(np.dot(z_axis, actual_normal) / (np.linalg.norm(z_axis) * np.linalg.norm(actual_normal)))
+        Rot = o3d.geometry.get_rotation_matrix_from_axis_angle(rotation_axis * angle)
 
-        default_plan = np.array([
-            [-0.91952137, 0.22853147, 0.3197715, 0.203026*0.001],
-            [0.22853147, 0.97279185, -0.03807087, 3.98506*0.001],
-            [-0.3197715, 0.03807087, -0.94672953, 21.95038*0.001],
-            [0., 0., 0., 1.]
-        ])
+        T = np.eye(4)
+        T[:3, :3] = Rot
+        T[:3, 3] = p3
 
-        theta  = -np.pi/2
+        default_plan = T
         default_plan_rotated = np.copy(default_plan)
         default_plan_rotated[:3, :3] = np.matmul(default_plan_rotated[:3, :3], R.from_euler('z', theta).as_matrix())
 
@@ -180,6 +186,16 @@ class PCDRegPipe(Node):
         self.get_logger().info(f"Drill point: {p}")
 
         return pose
+    
+    def load_plan_points(self,plan_name):
+            with open(self.plan_path, 'r') as file:
+                data = yaml.safe_load(file)  # Use safe_load to prevent arbitrary code execution
+                plan_data = data.get(plan_name, {})
+                p1 = np.array(plan_data.get('p1', [])) / 1000.0
+                p2 = np.array(plan_data.get('p2', [])) / 1000.0
+                p3 = np.array(plan_data.get('p3', [])) / 1000.0
+                return p1, p2, p3
+
             
     def publish_point_cloud(self, cloud):
         """Publishes the processed point cloud to a new ROS2 topic.

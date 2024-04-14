@@ -1,0 +1,21 @@
+# Surgical Plan Configuration
+# ---------------------------
+# Each plan is defined by three points in 3D space.
+# The hole is drilled at P3. 
+# The orientation is determined by the normal vector of the plane defined by P1, P2, P3.
+# ALL DIMENSIONS ARE IN MM
+# ---------------------------
+
+
+# Plan 1 - Medial Condyle
+plan1:
+  p1: [13.98485, -36.4029, 20.07205]
+  p2: [12.98173, -37.48651, 17.947]
+  p3: [16.12607, -38.20582, 18.66463]
+
+
+# Plan 2 - Distal Surface
+plan2:
+  p1: [2.899343, 4.66568, 22.83373]
+  p2: [1.10593, 7.09621, 22.13024]
+  p3: [0.203026, 3.98506, 21.95038]
