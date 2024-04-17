@@ -30,12 +30,14 @@ class PCDRegPipe(Node):
         super().__init__("pcd_regpipe")
         self.declare_parameter("sub_topic", "/camera/depth/color/points")
         self.declare_parameter("camera_frame", "camera_depth_optical_frame")
+        # self.declare_parameter("camera_frame", "camera_color_optical_frame")
 
         self.topic = self.get_parameter("sub_topic").get_parameter_value().string_value
         self.camera_frame = self.get_parameter("camera_frame").get_parameter_value().string_value
         self.subscriber_ = self.create_subscription(PointCloud2, self.topic, self.callback, 10)
         self._publisher_ = self.create_publisher(PointCloud2, 'processed_point_cloud', 10)
         self.pose_publisher = self.create_publisher(PoseStamped, 'surgical_drill_pose', 10)
+        self.pose_viz_publisher = self.create_publisher(PoseStamped, 'surgical_drill_pose_result', 10)
         self.marker_array_publisher = self.create_publisher(MarkerArray, 'bounding_box_marker_array', 10)
 
         self.x_thresh = 0.25
@@ -122,10 +124,13 @@ class PCDRegPipe(Node):
 
             self.publish_point_cloud(self.source_cloud)
 
+            surgical_drill_pose = self.compute_plan(transform)
+            self.pose_viz_publisher.publish(surgical_drill_pose)
+
+
             if_publish = input("Do you want to publish (y/n)?")
 
             if if_publish == "y":
-                surgical_drill_pose = self.compute_plan(transform)
                 self.pose_publisher.publish(surgical_drill_pose)
                 print("Published Pose!")
             else:
@@ -134,7 +139,7 @@ class PCDRegPipe(Node):
 
              
 
-    def compute_plan(self, transform,theta=0):
+    def compute_plan(self, transform,theta=-np.pi):
         """Computes the surgical drill point by transforming the default point with the given transform."""
 
 
