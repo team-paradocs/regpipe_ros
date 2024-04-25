@@ -11,7 +11,7 @@ from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseArray
 from scipy.spatial.transform import Rotation as R
 import geometry_msgs.msg
 
@@ -35,7 +35,7 @@ class PCDRegPipe(Node):
         self.camera_frame = self.get_parameter("camera_frame").get_parameter_value().string_value
         self.subscriber_ = self.create_subscription(PointCloud2, self.topic, self.callback, 10)
         self._publisher_ = self.create_publisher(PointCloud2, 'processed_point_cloud', 10)
-        self.pose_publisher = self.create_publisher(PoseStamped, 'surgical_drill_pose', 10)
+        self.pose_publisher = self.create_publisher(PoseArray, 'surgical_drill_pose', 10)
         self.marker_array_publisher = self.create_publisher(MarkerArray, 'bounding_box_marker_array', 10)
 
         self.x_thresh = 0.25
@@ -45,7 +45,7 @@ class PCDRegPipe(Node):
         source = "femur_shell.ply"
         self.source = o3d.io.read_point_cloud(package_dir + "/source/" + source)
         self.plan_path = package_dir + "/source/plan_config.yaml"
-        self.plan = "plan2"
+        self.plan = "plan3"
 
 
         self.proc_pipe = proc_pipeline.PointCloudProcessingPipeline(self.x_thresh, self.y_thresh, self.z_thresh)
@@ -134,67 +134,88 @@ class PCDRegPipe(Node):
 
              
 
-    def compute_plan(self, transform,theta=0):
+    def compute_plan(self, transform,theta=-np.pi):
         """Computes the surgical drill point by transforming the default point with the given transform."""
 
+        drill_pose_array = PoseArray()
+        drill_pose_array.header.frame_id = self.camera_frame
+        drill_pose_array.header.stamp = self.get_clock().now().to_msg()
 
-        p1, p2, p3 = self.load_plan_points(self.plan)
-        mesh = o3d.geometry.TriangleMesh()
-        mesh.vertices = o3d.utility.Vector3dVector([p1, p2, p3])
-        mesh.triangles = o3d.utility.Vector3iVector([[0, 1, 2]])
-        mesh.compute_vertex_normals()
-        normal =  np.asarray(mesh.vertex_normals)[0]
-        actual_normal = -normal
-        z_axis = np.array([0, 0, 1])
-        rotation_axis = np.cross(z_axis, actual_normal)
-        rotation_axis /= np.linalg.norm(rotation_axis)
-        angle = np.arccos(np.dot(z_axis, actual_normal) / (np.linalg.norm(z_axis) * np.linalg.norm(actual_normal)))
-        Rot = o3d.geometry.get_rotation_matrix_from_axis_angle(rotation_axis * angle)
+        holes = self.load_plan_points(self.plan)
+        for hole_name, hole in holes.items():
+            p1, p2, p3 = hole
 
-        T = np.eye(4)
-        T[:3, :3] = Rot
-        T[:3, 3] = p3
+            mesh = o3d.geometry.TriangleMesh()
+            mesh.vertices = o3d.utility.Vector3dVector([p1, p2, p3])
+            mesh.triangles = o3d.utility.Vector3iVector([[0, 1, 2]])
+            mesh.compute_vertex_normals()
+            normal =  np.asarray(mesh.vertex_normals)[0]
+            actual_normal = -normal
+            z_axis = np.array([0, 0, 1])
+            rotation_axis = np.cross(z_axis, actual_normal)
+            rotation_axis /= np.linalg.norm(rotation_axis)
+            angle = np.arccos(np.dot(z_axis, actual_normal) / (np.linalg.norm(z_axis) * np.linalg.norm(actual_normal)))
+            Rot = o3d.geometry.get_rotation_matrix_from_axis_angle(rotation_axis * angle)
 
-        default_plan = T
-        default_plan_rotated = np.copy(default_plan)
-        default_plan_rotated[:3, :3] = np.matmul(default_plan_rotated[:3, :3], R.from_euler('z', theta).as_matrix())
+            T = np.eye(4)
+            T[:3, :3] = Rot
+            T[:3, 3] = p3
+
+            default_plan = T
+            default_plan_rotated = np.copy(default_plan)
+            default_plan_rotated[:3, :3] = np.matmul(default_plan_rotated[:3, :3], R.from_euler('z', theta).as_matrix())
 
 
-        T = np.matmul(transform, default_plan_rotated)
+            T = np.matmul(transform, default_plan_rotated)
 
 
-        # Convert R to a quaternion
-        Rot = T[:3, :3]
-        r = R.from_matrix(Rot)
-        quat = r.as_quat()  # Returns (x, y, z, w)
+            # Convert R to a quaternion
+            Rot = T[:3, :3]
+            r = R.from_matrix(Rot)
+            quat = r.as_quat()  # Returns (x, y, z, w)
 
-        p = T[:3, 3]
+            p = T[:3, 3]
 
-        pose = PoseStamped()
-        pose.header.frame_id = self.camera_frame
-        pose.header.stamp = self.get_clock().now().to_msg()
+            pose = PoseStamped()
+            pose.header.frame_id = self.camera_frame
+            pose.header.stamp = self.get_clock().now().to_msg()
 
-        pose.pose.position.x = p[0]
-        pose.pose.position.y = p[1]
-        pose.pose.position.z = p[2]
+            pose.pose.position.x = p[0]
+            pose.pose.position.y = p[1]
+            pose.pose.position.z = p[2]
 
-        pose.pose.orientation.x = quat[0]
-        pose.pose.orientation.y = quat[1]
-        pose.pose.orientation.z = quat[2]
-        pose.pose.orientation.w = quat[3]
+            pose.pose.orientation.x = quat[0]
+            pose.pose.orientation.y = quat[1]
+            pose.pose.orientation.z = quat[2]
+            pose.pose.orientation.w = quat[3]
 
-        self.get_logger().info(f"Drill point: {p}")
+            self.get_logger().info(f"Drill point: {p}")
+            drill_pose_array.poses.append(pose.pose)
 
-        return pose
+        
+        # print(drill_pose_array)
+        return drill_pose_array
     
     def load_plan_points(self,plan_name):
-            with open(self.plan_path, 'r') as file:
-                data = yaml.safe_load(file)  # Use safe_load to prevent arbitrary code execution
-                plan_data = data.get(plan_name, {})
-                p1 = np.array(plan_data.get('p1', [])) / 1000.0
-                p2 = np.array(plan_data.get('p2', [])) / 1000.0
-                p3 = np.array(plan_data.get('p3', [])) / 1000.0
-                return p1, p2, p3
+        holes = {}
+        with open(self.plan_path, 'r') as file:
+            data = yaml.safe_load(file)  # Use safe_load to prevent arbitrary code execution
+            plan_data = data.get(plan_name, {})
+            # print(plan_data)
+            for hole_name, hole in plan_data.items():
+                for point_name, point_coords in hole.items():
+                    if point_name == "p1":
+                        p1 = np.array(point_coords) / 1000.0
+                    elif point_name == "p2":
+                        p2 = np.array(point_coords) / 1000.0
+                    elif point_name == "p3":
+                        p3 = np.array(point_coords) / 1000.0
+                holes[hole_name] = [p1, p2, p3]
+
+            # p1 = np.array(plan_data.get('p1', [])) / 1000.0
+            # p2 = np.array(plan_data.get('p2', [])) / 1000.0
+            # p3 = np.array(plan_data.get('p3', [])) / 1000.0
+            return holes
 
             
     def publish_point_cloud(self, cloud):
