@@ -12,7 +12,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/source', ['source/femur.ply']),
         ('share/' + package_name + '/source', ['source/femur_shell.ply']),
-        ('share/' + package_name + '/source', ['source/femur_shell2.ply']),
+        # ('share/' + package_name + '/source', ['source/femur_shell2.ply']),
         ('share/' + package_name + '/source', ['source/plan_config.yaml']),
     ],
     install_requires=['setuptools'],
@@ -28,6 +28,7 @@ setup(
             'pcd_publisher = regpipe_ros.pcd_publisher:main',
             'pcd_subscriber = regpipe_ros.pcd_subscriber:main',
             'pcd_regpipe = regpipe_ros.pcd_regpipe:main',
+            'pcd_regpipe_single = regpipe_ros.pcd_regpipe_single:main',
         ],
     },
 )
